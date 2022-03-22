@@ -33,7 +33,6 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.OnScrollListener
 import com.example.android.codelabs.paging.Injection
 import com.example.android.codelabs.paging.databinding.ActivitySearchRepositoriesBinding
-import com.example.android.codelabs.paging.model.Repo
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,7 +40,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -59,7 +57,7 @@ class SearchRepositoriesActivity : AppCompatActivity() {
 
         viewModel = ViewModelProvider(
             this,
-            Injection.provideViewModelFactory(owner = this)
+            Injection.provideViewModelFactory(context = this, owner = this)
         )[SearchRepositoriesViewModel::class.java]
 
         // add dividers between RecyclerView's row items
@@ -83,8 +81,11 @@ class SearchRepositoriesActivity : AppCompatActivity() {
         uiActions: (UiAction) -> Unit
     ) {
         val repoAdapter = ReposAdapter()
+        val header = ReposLoadStateAdapter { repoAdapter.retry() }
+
         bindAdapter(
-            repoAdapter = repoAdapter
+            repoAdapter = repoAdapter,
+            header = header
         )
         bindSearch(
             uiState = uiState,
@@ -92,6 +93,7 @@ class SearchRepositoriesActivity : AppCompatActivity() {
         )
         bindList(
             repoAdapter = repoAdapter,
+            header = header,
             uiState = uiState,
             pagingData = pagingData,
             onScrollChanged = uiActions
@@ -99,10 +101,11 @@ class SearchRepositoriesActivity : AppCompatActivity() {
     }
 
     private fun ActivitySearchRepositoriesBinding.bindAdapter(
-        repoAdapter: ReposAdapter
+        repoAdapter: ReposAdapter,
+        header: ReposLoadStateAdapter
     ) {
         list.adapter = repoAdapter.withLoadStateHeaderAndFooter(
-            header = ReposLoadStateAdapter { repoAdapter.retry() },
+            header = header,
             footer = ReposLoadStateAdapter { repoAdapter.retry() }
         )
     }
@@ -147,17 +150,18 @@ class SearchRepositoriesActivity : AppCompatActivity() {
 
     private fun ActivitySearchRepositoriesBinding.bindList(
         repoAdapter: ReposAdapter,
+        header: ReposLoadStateAdapter,
         uiState: StateFlow<UiState>,
         pagingData: Flow<PagingData<UiModel>>,
         onScrollChanged: (UiAction.Scroll) -> Unit
     ) {
+        retryButton.setOnClickListener { repoAdapter.retry() }
+
         setupScrollListener(uiState, onScrollChanged)
 
         val notLoading = repoAdapter.loadStateFlow
-            // Only emit when REFRESH LoadState for RemoteMediator changes
-            .distinctUntilChangedBy { it.source.refresh }
-            // Only react to cases where Remote REFRESH completes i.e., NotLoading
-            .map { it.source.refresh is LoadState.NotLoading }
+            .asRemotePresentationState()
+            .map { it == RemotePresentationState.PRESENTED }
 
         val hasNotScrolledForCurrentSearch = uiState
             .map { it.hasNotScrolledForCurrentSearch }
@@ -181,28 +185,33 @@ class SearchRepositoriesActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repoAdapter.loadStateFlow.collect { loadState ->
-                repoAdapter.addLoadStateListener {
-                    // show empty list
-                    val isListEmpty =
-                        it.refresh is LoadState.NotLoading && repoAdapter.itemCount == 0
-                    showEmptyList(isListEmpty)
-                    // Show loading spinner during initial load or refresh.
-                    showProgressBar(loadState.source.refresh is LoadState.Loading)
-                    // Show the retry state if initial load or refresh fails.
-                    showRetryButton(loadState.source.refresh is LoadState.Error)
+                // Show a retry header if there was an error refreshing, and items were previously
+                // cached OR default to the default prepend state
+                header.loadState = loadState.mediator
+                    ?.refresh
+                    ?.takeIf { it is LoadState.Error && repoAdapter.itemCount > 0 }
+                    ?: loadState.prepend
 
-                    // Toast on any error, regardless of whether it came from RemoteMediator or PagingSource
-                    val errorState = loadState.source.append as? LoadState.Error
-                        ?: loadState.source.prepend as? LoadState.Error
-                        ?: loadState.append as? LoadState.Error
-                        ?: loadState.prepend as? LoadState.Error
-                    errorState?.let { state ->
-                        Toast.makeText(
-                            this@SearchRepositoriesActivity,
-                            "\uD83D\uDE28 Woops ${state.error}",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
+                // show empty list
+                val isListEmpty =
+                    loadState.refresh is LoadState.NotLoading && repoAdapter.itemCount == 0
+                showEmptyList(isListEmpty)
+                // Show loading spinner during initial load or refresh.
+                showProgressBar(loadState.mediator?.refresh is LoadState.Loading)
+                // Show the retry state if initial load or refresh fails.
+                showRetryButton(loadState.mediator?.refresh is LoadState.Error && repoAdapter.itemCount == 0)
+
+                // Toast on any error, regardless of whether it came from RemoteMediator or PagingSource
+                val errorState = loadState.source.append as? LoadState.Error
+                    ?: loadState.source.prepend as? LoadState.Error
+                    ?: loadState.append as? LoadState.Error
+                    ?: loadState.prepend as? LoadState.Error
+                errorState?.let { state ->
+                    Toast.makeText(
+                        this@SearchRepositoriesActivity,
+                        "\uD83D\uDE28 Woooops ${state.error}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
