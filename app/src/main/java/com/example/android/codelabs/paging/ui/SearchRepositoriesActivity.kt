@@ -19,6 +19,7 @@ package com.example.android.codelabs.paging.ui
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
@@ -34,7 +35,6 @@ import com.example.android.codelabs.paging.Injection
 import com.example.android.codelabs.paging.databinding.ActivitySearchRepositoriesBinding
 import com.example.android.codelabs.paging.model.Repo
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
@@ -42,7 +42,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -179,11 +178,47 @@ class SearchRepositoriesActivity : AppCompatActivity() {
                 if (it) list.scrollToPosition(0)
             }
         }
+
+        lifecycleScope.launch {
+            repoAdapter.loadStateFlow.collect { loadState ->
+                repoAdapter.addLoadStateListener {
+                    // show empty list
+                    val isListEmpty =
+                        it.refresh is LoadState.NotLoading && repoAdapter.itemCount == 0
+                    showEmptyList(isListEmpty)
+                    // Show loading spinner during initial load or refresh.
+                    showProgressBar(loadState.source.refresh is LoadState.Loading)
+                    // Show the retry state if initial load or refresh fails.
+                    showRetryButton(loadState.source.refresh is LoadState.Error)
+
+                    // Toast on any error, regardless of whether it came from RemoteMediator or PagingSource
+                    val errorState = loadState.source.append as? LoadState.Error
+                        ?: loadState.source.prepend as? LoadState.Error
+                        ?: loadState.append as? LoadState.Error
+                        ?: loadState.prepend as? LoadState.Error
+                    errorState?.let {
+                        Toast.makeText(
+                            this@SearchRepositoriesActivity,
+                            "\uD83D\uDE28 Woops ${it.error}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        }
     }
 
     private fun ActivitySearchRepositoriesBinding.showEmptyList(show: Boolean) {
         emptyList.isVisible = show
         list.isVisible = !show
+    }
+
+    private fun ActivitySearchRepositoriesBinding.showProgressBar(show: Boolean) {
+        progressBar.isVisible = show
+    }
+
+    private fun ActivitySearchRepositoriesBinding.showRetryButton(show: Boolean) {
+        retryButton.isVisible = show
     }
 
     private fun ActivitySearchRepositoriesBinding.setupScrollListener(
