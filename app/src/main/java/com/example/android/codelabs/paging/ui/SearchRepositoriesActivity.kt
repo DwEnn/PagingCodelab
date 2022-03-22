@@ -102,7 +102,10 @@ class SearchRepositoriesActivity : AppCompatActivity() {
     private fun ActivitySearchRepositoriesBinding.bindAdapter(
         repoAdapter: ReposAdapter
     ) {
-        list.adapter = repoAdapter
+        list.adapter = repoAdapter.withLoadStateHeaderAndFooter(
+            header = ReposLoadStateAdapter { repoAdapter.retry() },
+            footer = ReposLoadStateAdapter { repoAdapter.retry() }
+        )
     }
 
     private fun ActivitySearchRepositoriesBinding.bindSearch(
