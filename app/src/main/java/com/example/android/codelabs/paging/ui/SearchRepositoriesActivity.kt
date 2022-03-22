@@ -79,7 +79,7 @@ class SearchRepositoriesActivity : AppCompatActivity() {
      */
     private fun ActivitySearchRepositoriesBinding.bindState(
         uiState: StateFlow<UiState>,
-        pagingData: Flow<PagingData<Repo>>,
+        pagingData: Flow<PagingData<UiModel>>,
         uiActions: (UiAction) -> Unit
     ) {
         val repoAdapter = ReposAdapter()
@@ -148,7 +148,7 @@ class SearchRepositoriesActivity : AppCompatActivity() {
     private fun ActivitySearchRepositoriesBinding.bindList(
         repoAdapter: ReposAdapter,
         uiState: StateFlow<UiState>,
-        pagingData: Flow<PagingData<Repo>>,
+        pagingData: Flow<PagingData<UiModel>>,
         onScrollChanged: (UiAction.Scroll) -> Unit
     ) {
         setupScrollListener(uiState, onScrollChanged)
@@ -196,10 +196,10 @@ class SearchRepositoriesActivity : AppCompatActivity() {
                         ?: loadState.source.prepend as? LoadState.Error
                         ?: loadState.append as? LoadState.Error
                         ?: loadState.prepend as? LoadState.Error
-                    errorState?.let {
+                    errorState?.let { state ->
                         Toast.makeText(
                             this@SearchRepositoriesActivity,
-                            "\uD83D\uDE28 Woops ${it.error}",
+                            "\uD83D\uDE28 Woops ${state.error}",
                             Toast.LENGTH_SHORT
                         ).show()
                     }

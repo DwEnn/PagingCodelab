@@ -21,6 +21,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import androidx.paging.insertSeparators
+import androidx.paging.map
 import com.example.android.codelabs.paging.data.GithubRepository
 import com.example.android.codelabs.paging.model.Repo
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,10 +34,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 
 /**
@@ -53,7 +57,7 @@ class SearchRepositoriesViewModel(
      */
     val state: StateFlow<UiState>
 
-    val pagingDataFlow: Flow<PagingData<Repo>>
+    val pagingDataFlow: Flow<PagingData<UiModel>>
 
     /**
      * Processor of side effects from the UI which in turn feedback into [state]
@@ -65,6 +69,7 @@ class SearchRepositoriesViewModel(
         val lastQueryScrolled: String = savedStateHandle.get(LAST_QUERY_SCROLLED) ?: DEFAULT_QUERY
         val actionStateFlow = MutableSharedFlow<UiAction>()
         // TODO("동일 검색어 처리 못 할것 같음, 중복 체크&필터링에서 인스턴스 체크만 하고 값에 대해서는 체크 못해줄듯함")
+        // #solved
         val searches = actionStateFlow
             .filterIsInstance<UiAction.Search>()
             .distinctUntilChanged()
@@ -106,7 +111,7 @@ class SearchRepositoriesViewModel(
 
     private var currentSearchResult: Flow<PagingData<Repo>>? = null
 
-    fun searchRepo(queryString: String): Flow<PagingData<Repo>> {
+    fun searchRepo(queryString: String): Flow<PagingData<UiModel>> {
 //        val lastResult = currentSearchResult
 //        if (queryString == currentQueryValue && lastResult != null) {
 //            return lastResult
@@ -116,7 +121,33 @@ class SearchRepositoriesViewModel(
 //            repository.getSearchResultStream(queryString).cachedIn(viewModelScope)
 //        currentSearchResult = newResult
 //        return newResult
-        return repository.getSearchResultStream(queryString)
+        return repository.getSearchResultStream(queryString).map { pagingData ->
+            pagingData.map { UiModel.RepoItem(it) }
+        }.map {
+            it.insertSeparators { before, after ->
+                if (after == null) {
+                    // we're at the end of the list
+                    return@insertSeparators null
+                }
+
+                if (before == null) {
+                    // we're at the beginning of the list
+                    return@insertSeparators UiModel.SeparatorItem("${after.roundedStartCount}0.000+ starts")
+                }
+
+                // check between 2 items
+                if (before.roundedStartCount > after.roundedStartCount) {
+                    if (after.roundedStartCount >= 1) {
+                        UiModel.SeparatorItem("${after.roundedStartCount}0.000+ starts")
+                    } else {
+                        UiModel.SeparatorItem("< 10.000+ starts")
+                    }
+                } else {
+                    // no separator
+                    null
+                }
+            }
+        }
     }
 
     override fun onCleared() {
@@ -136,6 +167,14 @@ data class UiState(
     val lastQueryScrolled: String = DEFAULT_QUERY,
     val hasNotScrolledForCurrentSearch: Boolean = false
 )
+
+sealed class UiModel {
+    data class RepoItem(val repo: Repo) : UiModel()
+    data class SeparatorItem(val description: String) : UiModel()
+}
+
+private val UiModel.RepoItem.roundedStartCount: Int
+    get() = this.repo.stars / 10_000
 
 private const val LAST_QUERY_SCROLLED: String = "last_query_scrolled"
 private const val LAST_SEARCH_QUERY: String = "last_search_query"

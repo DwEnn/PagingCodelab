@@ -5,6 +5,7 @@
       <map>
         <entry key="app/src/main/res/layout/activity_search_repositories.xml" value="0.265625" />
         <entry key="app/src/main/res/layout/repos_load_state_footer_view_item.xml" value="0.265625" />
+        <entry key="app/src/main/res/layout/separator_view_item.xml" value="0.14606741573033707" />
       </map>
     </option>
   </component>
