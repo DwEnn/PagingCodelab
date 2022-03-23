@@ -34,12 +34,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
 
 /**
@@ -121,33 +119,34 @@ class SearchRepositoriesViewModel(
 //            repository.getSearchResultStream(queryString).cachedIn(viewModelScope)
 //        currentSearchResult = newResult
 //        return newResult
-        return repository.getSearchResultStream(queryString).map { pagingData ->
-            pagingData.map { UiModel.RepoItem(it) }
-        }.map {
-            it.insertSeparators { before, after ->
-                if (after == null) {
-                    // we're at the end of the list
-                    return@insertSeparators null
-                }
-
-                if (before == null) {
-                    // we're at the beginning of the list
-                    return@insertSeparators UiModel.SeparatorItem("${after.roundedStartCount}0.000+ starts")
-                }
-
-                // check between 2 items
-                if (before.roundedStartCount > after.roundedStartCount) {
-                    if (after.roundedStartCount >= 1) {
-                        UiModel.SeparatorItem("${after.roundedStartCount}0.000+ starts")
-                    } else {
-                        UiModel.SeparatorItem("< 10.000+ starts")
+        return repository.getSearchResultStream(queryString)
+            .map { pagingData ->
+                pagingData.map { UiModel.RepoItem(it) }
+            }.map {
+                it.insertSeparators { before, after ->
+                    if (after == null) {
+                        // we're at the end of the list
+                        return@insertSeparators null
                     }
-                } else {
-                    // no separator
-                    null
+
+                    if (before == null) {
+                        // we're at the beginning of the list
+                        return@insertSeparators UiModel.SeparatorItem("${after.roundedStartCount}0.000+ starts")
+                    }
+
+                    // check between 2 items
+                    if (before.roundedStartCount > after.roundedStartCount) {
+                        if (after.roundedStartCount >= 1) {
+                            UiModel.SeparatorItem("${after.roundedStartCount}0.000+ starts")
+                        } else {
+                            UiModel.SeparatorItem("< 10.000+ starts")
+                        }
+                    } else {
+                        // no separator
+                        null
+                    }
                 }
             }
-        }
     }
 
     override fun onCleared() {
